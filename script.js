@@ -1,72 +1,113 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {ARButton} from 'three/addons/webxr/ARButton.js';
+import {TrackballControls} from 'three/addons/controls/TrackballControls.js';
 
 
-let camera, scene, renderer;
-let container;
 
-init();
-animate();
+const canvas = document.querySelector('#c');
+const renderer = new THREE.WebGLRenderer({antialias: true, canvas, alpha: true});
 
+const makescene = (object, elem) => 
+{
+  const scene = new THREE.Scene()
+  //add camera
+  const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 5)
+  camera.position.set(0, 0, 2)
+  scene.add(camera)
+  //add object
+  scene.add(object)
+  //add light
+  const light = new THREE.DirectionalLight(0xffffff, 1)
+  light.position.set(0, 2, 4)
+  scene.add(light)
+  //add constrols
+  const controls = new TrackballControls(camera, renderer.domElement);
+  controls.noZoom = true;
+  controls.noPan = true;
 
-function init() {
-    container = document.querySelector('.container');
-
-    //renderer
-    renderer = new THREE.WebGLRenderer( { antialias: true, alpha:true } );
-    renderer.setPixelRatio( window.devicePixelRatio );
-    renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1;
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    container.appendChild(renderer.domElement);
-
-    //AR addition
-    renderer.xr.enabled = true;
-    document.body.appendChild( ARButton.createButton( renderer ) );
-
-    //camera
-    camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 20 );
-    camera.position.set( 0, 0, 10);
-
-    //scene and environment
-    scene = new THREE.Scene();
-
-    window.addEventListener( 'resize', onWindowResize );
-
-    //objects
-    const material = new THREE.LineBasicMaterial({color: 'rgb(255,0,0)'});
-
-    const points = [];
-    points.push( new THREE.Vector3( - 10, 0, 0 ) );
-    points.push( new THREE.Vector3( 0, 10, 0 ) );
-    points.push( new THREE.Vector3( 10, 0, 0 ) );
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-
-    const mesh = new THREE.Line(geometry, material);
-
-    scene.add(mesh);
-    // render();
-
-    //controls
-    const controls = new OrbitControls(camera, container);
-    controls.target.set(0,0,0);
-    controls.update();
-
+  return {scene, camera, object, elem, controls}
 }
 
-function onWindowResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
+
+  const geometry1 = new THREE.BoxGeometry(1)
+  const material = new THREE.MeshPhongMaterial({color: 0x1155ff})
+  const object1 = new THREE.Mesh(geometry1, material)
+
+  const geometry2 = new THREE.SphereGeometry(0.8, 4, 2)
+  const object2 = new THREE.Mesh(geometry2, material)
+
+  const sceneInfo1 = makescene(object1, document.querySelector('#box'))
+  const sceneInfo2 = makescene(object2, document.querySelector('#pyramid'))
+
+
+function renderSceneInfo(sceneInfo) {
+  const {scene, camera, object, elem, controls} = sceneInfo;
+ 
+  // get the viewport relative position of this element
+  const {left, right, top, bottom, width, height} =
+      elem.getBoundingClientRect();
+ 
+  const isOffscreen =
+      bottom < 0 ||
+      top > renderer.domElement.clientHeight ||
+      right < 0 ||
+      left > renderer.domElement.clientWidth;
+
+  sceneInfo1.controls.handleResize();
+  sceneInfo1.controls.update();
+
+  if (isOffscreen) {
+    return;
+  }
+ 
+  camera.aspect = width / height;
   camera.updateProjectionMatrix();
-  renderer.setSize( window.innerWidth, window.innerHeight );
+ 
+  const positiveYUpBottom =  renderer.domElement.clientHeight - bottom;
+  renderer.setScissor(left, positiveYUpBottom, width, height);
+  renderer.setViewport(left, positiveYUpBottom, width, height);
+ 
+  renderer.render(scene, camera);
 }
 
-function animate() {
-  renderer.setAnimationLoop(render);
+function render(time) {
+  time *= 0.001;
+ 
+  resizeRendererToDisplaySize(renderer);
+ 
+  renderer.setScissorTest(false);
+  renderer.clear(true, true);
+  renderer.setScissorTest(true);
+ 
+  sceneInfo1.object.rotation.y = time * .1;
+  sceneInfo2.object.rotation.y = time * .1;
+
+  const transform = `translateY(${window.scrollY}px)`;
+  renderer.domElement.style.transform = transform;
+  
+  sceneInfo1.controls.handleResize();
+  sceneInfo1.controls.update();
+
+  sceneInfo1.camera.updateProjectionMatrix();
+
+  renderSceneInfo(sceneInfo1);
+  renderSceneInfo(sceneInfo2);
+ 
+  requestAnimationFrame(render);
 }
 
-function render() {
-  renderer.render( scene, camera );
-  // requestAnimationFrame(render);
+
+function resizeRendererToDisplaySize(renderer) {
+  const canvas = renderer.domElement;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const needResize = canvas.width !== width || canvas.height !== height;
+  if (needResize) {
+    renderer.setSize(width, height, false);
+  }
+  return needResize;
 }
+
+requestAnimationFrame(render);
+
